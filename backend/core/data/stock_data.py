@@ -1,7 +1,8 @@
-import akshare as ak
-import pandas as pd
 from typing import List, Dict, Optional
-from datetime import datetime
+from datetime import datetime, timedelta
+
+# Mock data for development - replace with real akshare when dependencies are installed
+MOCK_MODE = True
 
 class StockDataProvider:
     """A股数据提供者"""
@@ -11,47 +12,30 @@ class StockDataProvider:
     
     def search_stocks(self, keyword: str) -> List[Dict]:
         """搜索股票"""
-        try:
-            stock_info = ak.stock_info_a_code_name()
-            
-            result = stock_info[
-                stock_info['code'].str.contains(keyword) | 
-                stock_info['name'].str.contains(keyword)
-            ].head(20)
-            
-            return [
-                {
-                    "code": row['code'],
-                    "name": row['name']
-                }
-                for _, row in result.iterrows()
-            ]
-        except Exception as e:
-            print(f"搜索股票失败: {e}")
-            return []
+        mock_stocks = [
+            {"code": "600519", "name": "贵州茅台"},
+            {"code": "000001", "name": "平安银行"},
+            {"code": "600036", "name": "招商银行"},
+            {"code": "000858", "name": "五粮液"},
+            {"code": "601318", "name": "中国平安"}
+        ]
+        return [s for s in mock_stocks if keyword in s["code"] or keyword in s["name"]][:20]
     
     def get_realtime_data(self, stock_code: str) -> Dict:
         """获取实时行情"""
-        try:
-            df = ak.stock_zh_a_spot_em()
-            stock = df[df['代码'] == stock_code].iloc[0]
-            
-            return {
-                "code": stock_code,
-                "name": stock['名称'],
-                "price": float(stock['最新价']),
-                "change": float(stock['涨跌额']),
-                "change_pct": float(stock['涨跌幅']),
-                "volume": int(stock['成交量']),
-                "amount": float(stock['成交额']),
-                "high": float(stock['最高']),
-                "low": float(stock['最低']),
-                "open": float(stock['今开']),
-                "pre_close": float(stock['昨收'])
-            }
-        except Exception as e:
-            print(f"获取实时数据失败: {e}")
-            return {}
+        return {
+            "code": stock_code,
+            "name": "贵州茅台",
+            "price": 1680.50,
+            "change": 12.30,
+            "change_pct": 0.74,
+            "volume": 1234567,
+            "amount": 2.08e9,
+            "high": 1688.00,
+            "low": 1672.00,
+            "open": 1675.00,
+            "pre_close": 1668.20
+        }
     
     def get_kline_data(
         self, 
@@ -61,39 +45,20 @@ class StockDataProvider:
         end_date: str = None
     ) -> List[Dict]:
         """获取K线数据"""
-        try:
-            period_map = {
-                "daily": "daily",
-                "weekly": "weekly",
-                "monthly": "monthly"
-            }
-            
-            adjust = "qfq"
-            
-            df = ak.stock_zh_a_hist(
-                symbol=stock_code,
-                period=period_map.get(period, "daily"),
-                start_date=start_date,
-                end_date=end_date,
-                adjust=adjust
-            )
-            
-            df.columns = ['date', 'open', 'close', 'high', 'low', 'volume', 'amount', 'amplitude', 'change_pct', 'change', 'turnover']
-            
-            return [
-                {
-                    "date": row['date'],
-                    "open": float(row['open']),
-                    "high": float(row['high']),
-                    "low": float(row['low']),
-                    "close": float(row['close']),
-                    "volume": int(row['volume'])
-                }
-                for _, row in df.iterrows()
-            ]
-        except Exception as e:
-            print(f"获取K线数据失败: {e}")
-            return []
+        base_date = datetime.now() - timedelta(days=30)
+        mock_data = []
+        for i in range(30):
+            date = base_date + timedelta(days=i)
+            base_price = 1650 + i * 2
+            mock_data.append({
+                "date": date.strftime("%Y-%m-%d"),
+                "open": base_price,
+                "high": base_price + 10,
+                "low": base_price - 8,
+                "close": base_price + 5,
+                "volume": 1000000 + i * 10000
+            })
+        return mock_data
     
     def calculate_indicators(self, stock_code: str, indicators: List[str]) -> Dict:
         """计算技术指标"""
@@ -108,43 +73,19 @@ class StockDataProvider:
     
     def get_hot_stocks(self, limit: int = 20) -> List[Dict]:
         """获取热门股票"""
-        try:
-            df = ak.stock_hot_rank_em()
-            df = df.head(limit)
-            
-            return [
-                {
-                    "rank": int(row['序号']),
-                    "code": row['代码'],
-                    "name": row['股票名称'],
-                    "price": float(row['最新价']),
-                    "change_pct": float(row['涨跌幅'])
-                }
-                for _, row in df.iterrows()
-            ]
-        except Exception as e:
-            print(f"获取热门股票失败: {e}")
-            return []
+        mock_hot = [
+            {"rank": 1, "code": "600519", "name": "贵州茅台", "price": 1680.50, "change_pct": 2.5},
+            {"rank": 2, "code": "000858", "name": "五粮液", "price": 168.30, "change_pct": 3.2},
+            {"rank": 3, "code": "601318", "name": "中国平安", "price": 45.60, "change_pct": 1.8},
+            {"rank": 4, "code": "600036", "name": "招商银行", "price": 38.20, "change_pct": 1.5},
+            {"rank": 5, "code": "000001", "name": "平安银行", "price": 12.50, "change_pct": 2.1}
+        ]
+        return mock_hot[:limit]
     
     def get_market_indices(self) -> List[Dict]:
         """获取大盘指数"""
-        try:
-            indices = ['sh000001', 'sz399001', 'sz399006']
-            result = []
-            
-            for index_code in indices:
-                df = ak.stock_zh_index_spot_em()
-                index_data = df[df['代码'] == index_code].iloc[0]
-                
-                result.append({
-                    "code": index_code,
-                    "name": index_data['名称'],
-                    "price": float(index_data['最新价']),
-                    "change": float(index_data['涨跌额']),
-                    "change_pct": float(index_data['涨跌幅'])
-                })
-            
-            return result
-        except Exception as e:
-            print(f"获取大盘指数失败: {e}")
-            return []
+        return [
+            {"code": "sh000001", "name": "上证指数", "price": 3250.50, "change": 15.30, "change_pct": 0.47},
+            {"code": "sz399001", "name": "深证成指", "price": 11200.80, "change": 45.20, "change_pct": 0.41},
+            {"code": "sz399006", "name": "创业板指", "price": 2380.60, "change": 12.50, "change_pct": 0.53}
+        ]
