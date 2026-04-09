@@ -89,9 +89,16 @@ export default function Market() {
                   className="w-full text-left p-3 rounded-lg hover:bg-gray-50 transition-colors"
                 >
                   <div className="flex items-center justify-between">
-                    <div>
-                      <p className="font-medium text-gray-900">{stock.name}</p>
-                      <p className="text-sm text-gray-500">{stock.code}</p>
+                    <div className="flex items-center gap-2">
+                      <div>
+                        <p className="font-medium text-gray-900">{stock.name}</p>
+                        <p className="text-sm text-gray-500">{stock.code}</p>
+                      </div>
+                      {stock.is_mock && (
+                        <span className="px-2 py-0.5 text-xs font-medium bg-yellow-100 text-yellow-800 rounded-full">
+                          MOCK
+                        </span>
+                      )}
                     </div>
                     <div className="text-right">
                       <p className="font-semibold text-gray-900">¥{stock.price?.toFixed(2)}</p>

@@ -75,7 +75,7 @@ async def get_technical_indicators(
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.get("/market/hot")
+@router.get("/hot")
 async def get_hot_stocks(limit: int = Query(20, ge=1, le=100)):
     """获取热门股票"""
     try:
@@ -84,7 +84,7 @@ async def get_hot_stocks(limit: int = Query(20, ge=1, le=100)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.get("/market/index")
+@router.get("/index")
 async def get_market_index():
     """获取大盘指数"""
     try:

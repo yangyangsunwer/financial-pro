@@ -96,9 +96,16 @@ export default function Dashboard() {
             {marketIndices.length > 0 ? (
               marketIndices.map((index) => (
                 <div key={index.code} className="flex items-center justify-between">
-                  <div>
-                    <p className="font-medium text-gray-900">{index.name}</p>
-                    <p className="text-sm text-gray-500">{index.code}</p>
+                  <div className="flex items-center gap-2">
+                    <div>
+                      <p className="font-medium text-gray-900">{index.name}</p>
+                      <p className="text-sm text-gray-500">{index.code}</p>
+                    </div>
+                    {index.is_mock && (
+                      <span className="px-2 py-0.5 text-xs font-medium bg-yellow-100 text-yellow-800 rounded-full">
+                        MOCK
+                      </span>
+                    )}
                   </div>
                   <div className="text-right">
                     <p className="font-semibold text-gray-900">{index.price?.toFixed(2)}</p>

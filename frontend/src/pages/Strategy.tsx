@@ -4,9 +4,17 @@ import { Plus, Play, Edit, Trash2 } from 'lucide-react'
 export default function Strategy() {
   const [strategies, setStrategies] = useState<any[]>([])
   const [selectedStrategy, setSelectedStrategy] = useState<any>(null)
+  const [showCreateDialog, setShowCreateDialog] = useState(false)
+  const [formData, setFormData] = useState({
+    name: '',
+    description: '',
+    template: ''
+  })
+  const [templates, setTemplates] = useState<any[]>([])
 
   useEffect(() => {
     fetchStrategies()
+    fetchTemplates()
   }, [])
 
   const fetchStrategies = async () => {
@@ -17,6 +25,114 @@ export default function Strategy() {
     } catch (error) {
       console.error('获取策略列表失败:', error)
     }
+  }
+
+  const fetchTemplates = async () => {
+    try {
+      const response = await fetch('/api/strategy/templates/list')
+      const data = await response.json()
+      setTemplates(data.data || [])
+    } catch (error) {
+      console.error('获取策略模板失败:', error)
+    }
+  }
+
+  const handleCreateStrategy = async () => {
+    try {
+      const selectedTemplate = templates.find(t => t.id === formData.template)
+      const defaultCode = selectedTemplate ? getDefaultCode(formData.template) : getDefaultCode('ma_cross')
+
+      const response = await fetch('/api/strategy/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: formData.name,
+          description: formData.description,
+          code: defaultCode,
+          parameters: {}
+        })
+      })
+      await response.json()
+      alert('策略创建成功！')
+      setShowCreateDialog(false)
+      setFormData({ name: '', description: '', template: '' })
+      fetchStrategies()
+    } catch (error) {
+      console.error('创建策略失败:', error)
+      alert('创建策略失败，请重试')
+    }
+  }
+
+  const getDefaultCode = (templateId: string) => {
+    const codes: Record<string, string> = {
+      'ma_cross': `def strategy(data, short_period=5, long_period=20):
+    # 计算短期和长期均线
+    data['ma_short'] = data['close'].rolling(window=short_period).mean()
+    data['ma_long'] = data['close'].rolling(window=long_period).mean()
+    
+    # 生成交易信号
+    data['signal'] = 0
+    data.loc[data['ma_short'] > data['ma_long'], 'signal'] = 1  # 买入
+    data.loc[data['ma_short'] < data['ma_long'], 'signal'] = -1  # 卖出
+    
+    return data`,
+      'macd': `def strategy(data, fast_period=12, slow_period=26, signal_period=9):
+    # 计算 MACD
+    data['ema_fast'] = data['close'].ewm(span=fast_period).mean()
+    data['ema_slow'] = data['close'].ewm(span=slow_period).mean()
+    data['macd'] = data['ema_fast'] - data['ema_slow']
+    data['signal_line'] = data['macd'].ewm(span=signal_period).mean()
+    data['histogram'] = data['macd'] - data['signal_line']
+    
+    # 生成交易信号
+    data['signal'] = 0
+    data.loc[(data['macd'] > data['signal_line']) & (data['macd'].shift(1) <= data['signal_line'].shift(1)), 'signal'] = 1  # 金叉买入
+    data.loc[(data['macd'] < data['signal_line']) & (data['macd'].shift(1) >= data['signal_line'].shift(1)), 'signal'] = -1  # 死叉卖出
+    
+    return data`,
+      'kdj': `def strategy(data, n=9, m1=3, m2=3):
+    # 计算 KDJ
+    low_list = data['low'].rolling(window=n).min()
+    high_list = data['high'].rolling(window=n).max()
+    rsv = (data['close'] - low_list) / (high_list - low_list) * 100
+    data['K'] = rsv.ewm(com=m1-1).mean()
+    data['D'] = data['K'].ewm(com=m2-1).mean()
+    data['J'] = 3 * data['K'] - 2 * data['D']
+    
+    # 生成交易信号
+    data['signal'] = 0
+    data.loc[(data['K'] < 20) & (data['D'] < 20), 'signal'] = 1  # 超卖买入
+    data.loc[(data['K'] > 80) & (data['D'] > 80), 'signal'] = -1  # 超买卖出
+    
+    return data`,
+      'grid': `def strategy(data, grid_count=10, grid_range=0.1):
+    # 网格交易策略
+    price_range = data['close'].max() - data['close'].min()
+    grid_size = price_range / grid_count
+    base_price = data['close'].min()
+    
+    data['signal'] = 0
+    for i in range(grid_count):
+      upper_price = base_price + (i + 1) * grid_size
+      lower_price = base_price + i * grid_size
+      data.loc[(data['close'] >= lower_price) & (data['close'] < upper_price), 'signal'] = 1 if i % 2 == 0 else -1
+    
+    return data`,
+      'mean_reversion': `def strategy(data, window=20, std_dev=2):
+    # 均值回归策略
+    data['mean'] = data['close'].rolling(window=window).mean()
+    data['std'] = data['close'].rolling(window=window).std()
+    data['upper_band'] = data['mean'] + std_dev * data['std']
+    data['lower_band'] = data['mean'] - std_dev * data['std']
+    
+    # 生成交易信号
+    data['signal'] = 0
+    data.loc[data['close'] < data['lower_band'], 'signal'] = 1  # 价格低于下轨买入
+    data.loc[data['close'] > data['upper_band'], 'signal'] = -1  # 价格高于上轨卖出
+    
+    return data`
+    }
+    return codes[templateId] || codes['ma_cross']
   }
 
   const handleRunBacktest = async (strategyId: number) => {
@@ -48,7 +164,10 @@ export default function Strategy() {
             创建、管理和回测你的交易策略
           </p>
         </div>
-        <button className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 flex items-center gap-2">
+        <button
+          onClick={() => setShowCreateDialog(true)}
+          className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 flex items-center gap-2"
+        >
           <Plus size={18} />
           创建策略
         </button>
@@ -192,6 +311,77 @@ export default function Strategy() {
           />
         </div>
       </div>
+
+      {/* 创建策略模态框 */}
+      {showCreateDialog && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-md p-6">
+            <h2 className="text-xl font-bold text-gray-900 mb-4">创建新策略</h2>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  策略名称
+                </label>
+                <input
+                  type="text"
+                  value={formData.name}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                  placeholder="输入策略名称"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  策略描述
+                </label>
+                <textarea
+                  value={formData.description}
+                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                  rows={3}
+                  placeholder="输入策略描述"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  选择模板
+                </label>
+                <select
+                  value={formData.template}
+                  onChange={(e) => setFormData({ ...formData, template: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                >
+                  <option value="">-- 选择策略模板 --</option>
+                  {templates.map((template) => (
+                    <option key={template.id} value={template.id}>
+                      {template.name} - {template.difficulty}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div className="mt-6 flex gap-3">
+              <button
+                onClick={() => setShowCreateDialog(false)}
+                className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
+              >
+                取消
+              </button>
+              <button
+                onClick={handleCreateStrategy}
+                disabled={!formData.name || !formData.description}
+                className="flex-1 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
+              >
+                创建
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
