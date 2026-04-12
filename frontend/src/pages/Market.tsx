@@ -36,11 +36,16 @@ export default function Market() {
 
   const handleStockClick = async (stock: any) => {
     setSelectedStock(stock)
-    
+
     try {
+      console.log('正在获取K线数据，股票代码:', stock.code)
       const response = await fetch(`/api/market/stocks/${stock.code}/kline?period=daily`)
       const data = await response.json()
+      console.log('K线数据响应:', data)
       setKlineData(data.data || [])
+      if (!data.data || data.data.length === 0) {
+        console.warn('K线数据为空')
+      }
     } catch (error) {
       console.error('获取K线数据失败:', error)
     }
