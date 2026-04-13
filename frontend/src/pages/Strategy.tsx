@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Plus, Play, Edit, Trash2 } from 'lucide-react'
+import BacktestChart from './BacktestChart'
 
 export default function Strategy() {
   const [strategies, setStrategies] = useState<any[]>([])
@@ -11,6 +12,16 @@ export default function Strategy() {
     template: ''
   })
   const [templates, setTemplates] = useState<any[]>([])
+  const [showBacktestDialog, setShowBacktestDialog] = useState(false)
+  const [backtestStrategyId, setBacktestStrategyId] = useState<number | null>(null)
+  const [backtestParams, setBacktestParams] = useState({
+    stock_code: '000001',
+    start_date: '20250101',
+    end_date: '20260401',
+    initial_capital: 100000
+  })
+  const [backtestLoading, setBacktestLoading] = useState(false)
+  const [backtestResult, setBacktestResult] = useState<any>(null)
 
   useEffect(() => {
     fetchStrategies()
@@ -135,23 +146,38 @@ export default function Strategy() {
     return codes[templateId] || codes['ma_cross']
   }
 
-  const handleRunBacktest = async (strategyId: number) => {
+  const openBacktestDialog = (strategyId: number) => {
+    setBacktestStrategyId(strategyId)
+    setShowBacktestDialog(true)
+  }
+
+  const handleRunBacktest = async () => {
+    if (!backtestStrategyId) return
+    setBacktestLoading(true)
     try {
       const response = await fetch('/api/backtest/run', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          strategy_id: strategyId,
-          stock_code: '000001',
-          start_date: '20230101',
-          end_date: '20231231',
-          initial_capital: 100000
+          strategy_id: backtestStrategyId,
+          stock_code: backtestParams.stock_code,
+          start_date: backtestParams.start_date,
+          end_date: backtestParams.end_date,
+          initial_capital: backtestParams.initial_capital
         })
       })
       const data = await response.json()
-      alert(`回测完成！总收益率: ${(data.data.total_return * 100).toFixed(2)}%`)
+      if (data.data && data.data.chart) {
+        setBacktestResult(data.data)
+        setShowBacktestDialog(false)
+      } else {
+        alert(`回测失败: ${data.detail || '未知错误'}`)
+      }
     } catch (error) {
       console.error('运行回测失败:', error)
+      alert('运行回测失败，请检查后端服务')
+    } finally {
+      setBacktestLoading(false)
     }
   }
 
@@ -200,7 +226,7 @@ export default function Strategy() {
                 <button
                   onClick={(e) => {
                     e.stopPropagation()
-                    handleRunBacktest(strategy.id)
+                    openBacktestDialog(strategy.id)
                   }}
                   className="flex-1 px-3 py-1.5 bg-primary-600 text-white text-sm rounded hover:bg-primary-700 flex items-center justify-center gap-1"
                 >
@@ -276,7 +302,7 @@ export default function Strategy() {
                   保存策略
                 </button>
                 <button
-                  onClick={() => handleRunBacktest(selectedStrategy.id)}
+                  onClick={() => openBacktestDialog(selectedStrategy.id)}
                   className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
                 >
                   运行回测
@@ -311,6 +337,93 @@ export default function Strategy() {
           />
         </div>
       </div>
+
+      {/* 回测结果图表 */}
+      {backtestResult && (
+        <BacktestChart
+          data={backtestResult}
+          onClose={() => setBacktestResult(null)}
+        />
+      )}
+
+      {/* 回测参数弹窗 */}
+      {showBacktestDialog && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-md p-6">
+            <h2 className="text-xl font-bold text-gray-900 mb-4">回测参数设置</h2>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  股票代码
+                </label>
+                <input
+                  type="text"
+                  value={backtestParams.stock_code}
+                  onChange={(e) => setBacktestParams({ ...backtestParams, stock_code: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                  placeholder="例如: 000001（平安银行）、600519（贵州茅台）"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    开始日期
+                  </label>
+                  <input
+                    type="text"
+                    value={backtestParams.start_date}
+                    onChange={(e) => setBacktestParams({ ...backtestParams, start_date: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                    placeholder="如 20250101"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    结束日期
+                  </label>
+                  <input
+                    type="text"
+                    value={backtestParams.end_date}
+                    onChange={(e) => setBacktestParams({ ...backtestParams, end_date: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                    placeholder="如 20260401"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  初始资金（元）
+                </label>
+                <input
+                  type="number"
+                  value={backtestParams.initial_capital}
+                  onChange={(e) => setBacktestParams({ ...backtestParams, initial_capital: Number(e.target.value) })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                />
+              </div>
+            </div>
+
+            <div className="mt-6 flex gap-3">
+              <button
+                onClick={() => setShowBacktestDialog(false)}
+                className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
+              >
+                取消
+              </button>
+              <button
+                onClick={handleRunBacktest}
+                disabled={backtestLoading || !backtestParams.stock_code}
+                className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
+              >
+                {backtestLoading ? '回测中...' : '开始回测'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 创建策略模态框 */}
       {showCreateDialog && (
