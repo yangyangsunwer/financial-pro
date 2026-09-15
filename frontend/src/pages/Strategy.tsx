@@ -141,6 +141,33 @@ export default function Strategy() {
     data.loc[data['close'] < data['lower_band'], 'signal'] = 1  # 价格低于下轨买入
     data.loc[data['close'] > data['upper_band'], 'signal'] = -1  # 价格高于上轨卖出
     
+    return data`,
+      'rsi': `def strategy(data, period=14, overbought=70, oversold=30):
+    # RSI策略
+    delta = data['close'].diff()
+    gain = (delta.where(delta > 0, 0)).rolling(window=period).mean()
+    loss = (-delta.where(delta < 0, 0)).rolling(window=period).mean()
+    rs = gain / loss
+    data['rsi'] = 100 - (100 / (1 + rs))
+    
+    # 生成交易信号
+    data['signal'] = 0
+    data.loc[data['rsi'] < oversold, 'signal'] = 1  # 超卖买入
+    data.loc[data['rsi'] > overbought, 'signal'] = -1  # 超买卖出
+    
+    return data`,
+      'bollinger': `def strategy(data, window=20, std_dev=2):
+    # 布林带策略
+    data['ma'] = data['close'].rolling(window=window).mean()
+    data['std'] = data['close'].rolling(window=window).std()
+    data['upper_band'] = data['ma'] + std_dev * data['std']
+    data['lower_band'] = data['ma'] - std_dev * data['std']
+    
+    # 生成交易信号
+    data['signal'] = 0
+    data.loc[data['close'] < data['lower_band'], 'signal'] = 1  # 价格触及下轨买入
+    data.loc[data['close'] > data['upper_band'], 'signal'] = -1  # 价格触及上轨卖出
+    
     return data`
     }
     return codes[templateId] || codes['ma_cross']
@@ -320,21 +347,18 @@ export default function Strategy() {
       <div className="bg-white rounded-lg shadow p-6">
         <h2 className="text-lg font-semibold text-gray-900 mb-4">策略模板</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          <TemplateCard
-            title="双均线策略"
-            description="短期均线上穿长期均线买入，下穿卖出"
-            difficulty="初级"
-          />
-          <TemplateCard
-            title="MACD策略"
-            description="MACD金叉买入，死叉卖出"
-            difficulty="初级"
-          />
-          <TemplateCard
-            title="网格交易"
-            description="在价格区间内设置网格进行交易"
-            difficulty="中级"
-          />
+          {templates.map((template) => (
+            <TemplateCard
+              key={template.id}
+              title={template.name}
+              description={template.description}
+              difficulty={template.difficulty}
+              onUseTemplate={() => {
+                setFormData({ name: '', description: '', template: template.id })
+                setShowCreateDialog(true)
+              }}
+            />
+          ))}
         </div>
       </div>
 
@@ -474,6 +498,11 @@ export default function Strategy() {
                     </option>
                   ))}
                 </select>
+                {formData.template && (
+                  <p className="mt-1 text-sm text-green-600">
+                    已选择: {templates.find(t => t.id === formData.template)?.name}
+                  </p>
+                )}
               </div>
             </div>
 
@@ -499,7 +528,7 @@ export default function Strategy() {
   )
 }
 
-function TemplateCard({ title, description, difficulty }: any) {
+function TemplateCard({ title, description, difficulty, onUseTemplate }: any) {
   return (
     <div className="border border-gray-200 rounded-lg p-4 hover:border-primary-500 hover:shadow-md transition-all cursor-pointer">
       <div className="flex items-start justify-between mb-2">
@@ -509,7 +538,10 @@ function TemplateCard({ title, description, difficulty }: any) {
         </span>
       </div>
       <p className="text-sm text-gray-600">{description}</p>
-      <button className="mt-3 w-full px-3 py-1.5 border border-primary-600 text-primary-600 rounded hover:bg-primary-50 text-sm">
+      <button
+        onClick={onUseTemplate}
+        className="mt-3 w-full px-3 py-1.5 border border-primary-600 text-primary-600 rounded hover:bg-primary-50 text-sm"
+      >
         使用模板
       </button>
     </div>

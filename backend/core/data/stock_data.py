@@ -13,45 +13,147 @@ class StockDataProvider:
         self.cache = {}
     
     def search_stocks(self, keyword: str) -> List[Dict]:
-        """搜索股票"""
+        """搜索股票 - 使用腾讯财经API作为降级方案"""
         try:
-            stock_info = ak.stock_info_a_code_name()
+            # 方案1: 尝试使用akshare
+            try:
+                stock_info = ak.stock_info_a_code_name()
+                
+                result = stock_info[
+                    stock_info['code'].str.contains(keyword) | 
+                    stock_info['name'].str.contains(keyword)
+                ].head(20)
+                
+                stocks = []
+                for _, row in result.iterrows():
+                    code = row['code']
+                    realtime_data = self.get_realtime_data(code)
+                    stocks.append({
+                        "code": code,
+                        "name": row['name'],
+                        "price": realtime_data.get('price', 0) if realtime_data else 0,
+                        "change_pct": realtime_data.get('change_pct', 0) if realtime_data else 0
+                    })
+                
+                return stocks
+            except Exception as e:
+                print(f"akshare搜索失败，使用降级方案: {e}")
             
-            result = stock_info[
-                stock_info['code'].str.contains(keyword) | 
-                stock_info['name'].str.contains(keyword)
-            ].head(20)
-            
-            return [
-                {
-                    "code": row['code'],
-                    "name": row['name']
+            # 方案2: 降级方案 - 使用腾讯财经API搜索
+            try:
+                url = "https://smartbox.gtimg.cn/s3/"
+                params = {
+                    "t": "all",
+                    "q": keyword
                 }
-                for _, row in result.iterrows()
-            ]
+                resp = requests.get(url, params=params, timeout=10)
+                data = resp.json()
+                
+                stocks = []
+                if 'data' in data:
+                    for item in data['data'][:20]:
+                        code = item[0]
+                        name = item[1]
+                        # 获取实时价格
+                        realtime_data = self.get_realtime_data(code)
+                        stocks.append({
+                            "code": code,
+                            "name": name,
+                            "price": realtime_data.get('price', 0) if realtime_data else 0,
+                            "change_pct": realtime_data.get('change_pct', 0) if realtime_data else 0
+                        })
+                return stocks
+            except Exception as e:
+                print(f"腾讯API搜索失败: {e}")
+                
+            return []
         except Exception as e:
             print(f"搜索股票失败: {e}")
+            traceback.print_exc()
             return []
     
     def get_realtime_data(self, stock_code: str) -> Dict:
-        """获取实时行情"""
+        """获取实时行情 - 使用腾讯财经API作为降级方案"""
         try:
-            df = ak.stock_zh_a_spot_em()
-            stock = df[df['代码'] == stock_code].iloc[0]
+            # 方案1: 尝试使用akshare
+            try:
+                df = ak.stock_zh_a_spot_em()
+                stock = df[df['代码'] == stock_code].iloc[0]
+                
+                return {
+                    "code": stock_code,
+                    "name": stock['名称'],
+                    "price": float(stock['最新价']),
+                    "change": float(stock['涨跌额']),
+                    "change_pct": float(stock['涨跌幅']),
+                    "volume": int(stock['成交量']),
+                    "amount": float(stock['成交额']),
+                    "high": float(stock['最高']),
+                    "low": float(stock['最低']),
+                    "open": float(stock['今开']),
+                    "pre_close": float(stock['昨收'])
+                }
+            except Exception as e:
+                print(f"akshare获取实时数据失败，使用降级方案: {e}")
             
-            return {
-                "code": stock_code,
-                "name": stock['名称'],
-                "price": float(stock['最新价']),
-                "change": float(stock['涨跌额']),
-                "change_pct": float(stock['涨跌幅']),
-                "volume": int(stock['成交量']),
-                "amount": float(stock['成交额']),
-                "high": float(stock['最高']),
-                "low": float(stock['最低']),
-                "open": float(stock['今开']),
-                "pre_close": float(stock['昨收'])
-            }
+            # 方案2: 降级方案 - 使用腾讯财经API
+            try:
+                # 腾讯API需要 sz/sh 前缀格式
+                if not stock_code.startswith(('sh', 'sz')):
+                    if len(stock_code) == 6:
+                        if stock_code.startswith('6'):
+                            stock_code = f'sh{stock_code}'
+                        elif stock_code.startswith(('0', '3')):
+                            stock_code = f'sz{stock_code}'
+                        else:
+                            stock_code = f'sh{stock_code}'
+                
+                url = f"https://qt.gtimg.cn/q={stock_code}"
+                resp = requests.get(url, timeout=10)
+                resp.encoding = 'gbk'
+                text = resp.text.strip()
+                
+                print(f"[实时数据] 腾讯API原始响应: {text[:200]}...")
+                
+                # 格式: v_sh600400="1~红豆股份~600400~3.26~2.96~3.00~1046060~364068~681992~3.26~94792~..."
+                # 字段索引: 0=未知, 1=名称, 2=代码, 3=现价, 4=昨收, 5=今开, 6=买一量, 7=买一价, 8=卖一量, 9=卖一价
+                # 后面字段包含: 最高价、最低价、成交量等
+                if '=' in text:
+                    parts = text.split('=')[1].strip('"').split('~')
+                    print(f"[实时数据] 解析后的字段数量: {len(parts)}, 前15个字段: {parts[:15]}")
+                    if len(parts) >= 40:
+                        name = parts[1]
+                        price = float(parts[3])
+                        pre_close = float(parts[4])
+                        open_price = float(parts[5])
+                        # 从后面的字段获取最高价、最低价、成交量
+                        # 格式类似: ...~最高~最低~成交量~...
+                        high = float(parts[33]) if len(parts) > 33 else price
+                        low = float(parts[34]) if len(parts) > 34 else price
+                        volume = int(float(parts[36])) if len(parts) > 36 else 0  # 成交量(手)
+                        amount = float(parts[37]) if len(parts) > 37 else 0  # 成交额(万元)
+                        change = round(price - pre_close, 2)
+                        change_pct = round((change / pre_close) * 100, 2) if pre_close else 0
+                        
+                        print(f"[实时数据] 解析结果: price={price}, open={open_price}, high={high}, low={low}, volume={volume}")
+                        
+                        return {
+                            "code": stock_code,
+                            "name": name,
+                            "price": price,
+                            "change": change,
+                            "change_pct": change_pct,
+                            "volume": volume * 100,  # 手转换为股
+                            "amount": amount * 10000,  # 万元转换为元
+                            "high": high,
+                            "low": low,
+                            "open": open_price,
+                            "pre_close": pre_close
+                        }
+            except Exception as e:
+                print(f"腾讯API获取实时数据失败: {e}")
+            
+            return {}
         except Exception as e:
             print(f"获取实时数据失败: {e}")
             return {}
@@ -60,8 +162,8 @@ class StockDataProvider:
         self,
         stock_code: str,
         period: str = "daily",
-        start_date: str = None,
-        end_date: str = None
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None
     ) -> List[Dict]:
         """获取K线数据 - 使用腾讯财经API"""
         print(f"[K线] 原始股票代码: {stock_code}")
@@ -141,6 +243,7 @@ class StockDataProvider:
                     print(f"[K线] 所有重试均失败")
                     traceback.print_exc()
                     return []
+        return []
     
     def calculate_indicators(self, stock_code: str, indicators: List[str]) -> Dict:
         """计算技术指标"""

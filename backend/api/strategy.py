@@ -4,6 +4,31 @@ from pydantic import BaseModel
 
 router = APIRouter()
 
+# 内存存储创建的策略
+strategies_store = [
+    {
+        "id": 1,
+        "name": "双均线策略",
+        "description": "基于短期和长期均线交叉的经典策略",
+        "type": "趋势跟踪",
+        "status": "active"
+    },
+    {
+        "id": 2,
+        "name": "MACD金叉策略",
+        "description": "MACD指标金叉买入，死叉卖出",
+        "type": "技术指标",
+        "status": "active"
+    },
+    {
+        "id": 3,
+        "name": "网格交易策略",
+        "description": "在价格区间内设置网格进行高抛低吸",
+        "type": "套利",
+        "status": "draft"
+    }
+]
+
 class Strategy(BaseModel):
     id: Optional[int] = None
     name: str
@@ -21,30 +46,7 @@ class StrategyCreate(BaseModel):
 @router.get("/list")
 async def list_strategies():
     """获取策略列表"""
-    strategies = [
-        {
-            "id": 1,
-            "name": "双均线策略",
-            "description": "基于短期和长期均线交叉的经典策略",
-            "type": "趋势跟踪",
-            "status": "active"
-        },
-        {
-            "id": 2,
-            "name": "MACD金叉策略",
-            "description": "MACD指标金叉买入，死叉卖出",
-            "type": "技术指标",
-            "status": "active"
-        },
-        {
-            "id": 3,
-            "name": "网格交易策略",
-            "description": "在价格区间内设置网格进行高抛低吸",
-            "type": "套利",
-            "status": "draft"
-        }
-    ]
-    return {"data": strategies, "count": len(strategies)}
+    return {"data": strategies_store, "count": len(strategies_store)}
 
 @router.get("/{strategy_id}")
 async def get_strategy(strategy_id: int):
@@ -80,12 +82,21 @@ def strategy(data, short_period=5, long_period=20):
 @router.post("/create")
 async def create_strategy(strategy: StrategyCreate):
     """创建新策略"""
+    new_id = max([s["id"] for s in strategies_store]) + 1 if strategies_store else 1
+    new_strategy = {
+        "id": new_id,
+        "name": strategy.name,
+        "description": strategy.description,
+        "type": "自定义",
+        "status": "active",
+        "code": strategy.code,
+        "parameters": strategy.parameters,
+        "created_at": "2024-04-15"
+    }
+    strategies_store.append(new_strategy)
     return {
         "message": "策略创建成功",
-        "data": {
-            "id": 4,
-            **strategy.dict()
-        }
+        "data": new_strategy
     }
 
 @router.put("/{strategy_id}")
@@ -137,6 +148,18 @@ async def list_strategy_templates():
             "name": "均值回归",
             "description": "价格偏离均值时进行反向交易",
             "difficulty": "高级"
+        },
+        {
+            "id": "rsi",
+            "name": "RSI策略",
+            "description": "RSI指标判断超买超卖区域",
+            "difficulty": "初级"
+        },
+        {
+            "id": "bollinger",
+            "name": "布林带策略",
+            "description": "价格触及布林带上下轨时交易",
+            "difficulty": "中级"
         }
     ]
     return {"data": templates}

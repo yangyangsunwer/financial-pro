@@ -7,6 +7,7 @@ export default function Market() {
   const [hotStocks, setHotStocks] = useState<any[]>([])
   const [selectedStock, setSelectedStock] = useState<any>(null)
   const [klineData, setKlineData] = useState<any[]>([])
+  const [searchResults, setSearchResults] = useState<any[]>([])
 
   useEffect(() => {
     fetchHotStocks()
@@ -29,6 +30,7 @@ export default function Market() {
       const response = await fetch(`/api/market/stocks/search?keyword=${searchTerm}`)
       const data = await response.json()
       console.log('搜索结果:', data)
+      setSearchResults(data.data || [])
     } catch (error) {
       console.error('搜索失败:', error)
     }
@@ -45,6 +47,14 @@ export default function Market() {
       setKlineData(data.data || [])
       if (!data.data || data.data.length === 0) {
         console.warn('K线数据为空')
+      }
+
+      // 获取实时行情数据
+      const realtimeResponse = await fetch(`/api/market/stocks/${stock.code}/realtime`)
+      const realtimeData = await realtimeResponse.json()
+      console.log('实时行情响应:', realtimeData)
+      if (realtimeData.data) {
+        setSelectedStock(realtimeData.data)
       }
     } catch (error) {
       console.error('获取K线数据失败:', error)
@@ -80,6 +90,33 @@ export default function Market() {
             搜索
           </button>
         </div>
+        {searchResults.length > 0 && (
+          <div className="mt-4 space-y-2 max-h-[300px] overflow-y-auto">
+            {searchResults.map((stock) => (
+              <button
+                key={stock.code}
+                onClick={() => {
+                  handleStockClick(stock)
+                  setSearchResults([])
+                  setSearchTerm('')
+                }}
+                className="w-full text-left p-3 rounded-lg hover:bg-gray-50 transition-colors"
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div>
+                      <p className="font-medium text-gray-900">{stock.name}</p>
+                      <p className="text-sm text-gray-500">{stock.code}</p>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <p className="font-semibold text-gray-900">¥{stock.price?.toFixed(2)}</p>
+                  </div>
+                </div>
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -153,10 +190,10 @@ export default function Market() {
               </div>
 
               <div className="grid grid-cols-4 gap-4">
-                <InfoItem label="开盘" value={`¥${selectedStock.price?.toFixed(2)}`} />
-                <InfoItem label="最高" value={`¥${selectedStock.price?.toFixed(2)}`} />
-                <InfoItem label="最低" value={`¥${selectedStock.price?.toFixed(2)}`} />
-                <InfoItem label="成交量" value="1.2亿" />
+                <InfoItem label="开盘" value={`¥${selectedStock.open?.toFixed(2) || selectedStock.price?.toFixed(2)}`} />
+                <InfoItem label="最高" value={`¥${selectedStock.high?.toFixed(2) || selectedStock.price?.toFixed(2)}`} />
+                <InfoItem label="最低" value={`¥${selectedStock.low?.toFixed(2) || selectedStock.price?.toFixed(2)}`} />
+                <InfoItem label="成交量" value={selectedStock.volume ? `${(selectedStock.volume / 100000000).toFixed(2)}亿` : 'N/A'} />
               </div>
             </>
           ) : (
